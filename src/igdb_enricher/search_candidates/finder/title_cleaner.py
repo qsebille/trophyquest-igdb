@@ -8,7 +8,7 @@ def get_clean_title(title: str) -> str:
     ]
 
     title_alphanum = "".join(characters)
-    return title_alphanum.lower()
+    return title_alphanum.lower().strip()
 
 
 def get_minimal_title(title: str) -> str:
