@@ -1,0 +1,216 @@
+name: deploy
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-deploy-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+      tag: ${{ steps.publish.outputs.tag }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Determine version increment
+        id: bump
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$PR_TITLE" =~ ^breaking:[[:space:]]+[^[:space:]] ]]; then
+            BUMP=major
+          elif [[ "$PR_TITLE" =~ ^feat:[[:space:]]+[^[:space:]] ]]; then
+            BUMP=minor
+          elif [[ "$PR_TITLE" =~ ^fix:[[:space:]]+[^[:space:]] ]]; then
+            BUMP=patch
+          else
+            echo "::error::Title must begin with fix:, feat: or breaking:"
+            exit 1
+          fi
+
+          echo "type=$BUMP" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version from tags
+        id: version
+        env:
+          BUMP: ${{ steps.bump.outputs.type }}
+        run: |
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          CURRENT=${LATEST_TAG#v}
+          CURRENT=${CURRENT:-0.0.0}
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          echo "version=$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
+
+      - name: Publish tag
+        id: publish
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+      FUNCTION_NAME: igdb-enricher
+      ALIAS_NAME: prod
+      AWS_PAGER: ""
+
+    steps:
+      - name: Checkout released sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Read Lambda configuration
+        id: lambda
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONFIG=$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --output json)
+
+          RUNTIME=$(jq -r '.Runtime' <<< "$CONFIG")
+          ARCHITECTURE=$(jq -r '.Architectures[0]' <<< "$CONFIG")
+
+          if [[ ! "$RUNTIME" =~ ^python3\.[0-9]+$ ]]; then
+            echo "::error::Unsupported runtime: $RUNTIME"
+            exit 1
+          fi
+
+          case "$ARCHITECTURE" in
+            x86_64) PLATFORM=manylinux2014_x86_64 ;;
+            arm64) PLATFORM=manylinux2014_aarch64 ;;
+            *)
+              echo "::error::Unsupported architecture: $ARCHITECTURE"
+              exit 1
+              ;;
+          esac
+
+          echo "python_version=${RUNTIME#python}" >> "$GITHUB_OUTPUT"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.lambda.outputs.python_version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Package Lambda
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ steps.lambda.outputs.python_version }}
+          PLATFORM: ${{ steps.lambda.outputs.platform }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p packaged-lambda artifacts
+
+          python -m pip install --upgrade pip
+          python -m pip install \
+            --requirement requirements.txt \
+            --target packaged-lambda/ \
+            --platform "$PLATFORM" \
+            --implementation cp \
+            --python-version "$PYTHON_VERSION" \
+            --only-binary=:all: \
+            --no-compile
+
+          cp -R src/. packaged-lambda/
+
+          cd packaged-lambda
+          zip -qr ../artifacts/igdb-enricher.zip . \
+            -x '*/__pycache__/*' '*.pyc'
+
+      - name: Update Lambda code
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://artifacts/igdb-enricher.zip \
+            --output json > /dev/null
+
+          aws lambda wait function-updated \
+            --function-name "$FUNCTION_NAME"
+
+      - name: Publish version and update alias
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LAMBDA_VERSION=$(aws lambda publish-version \
+            --function-name "$FUNCTION_NAME" \
+            --description "$RELEASE_TAG" \
+            --query 'Version' \
+            --output text)
+
+          aws lambda wait published-version-active \
+            --function-name "$FUNCTION_NAME" \
+            --qualifier "$LAMBDA_VERSION"
+
+          aws lambda update-alias \
+            --function-name "$FUNCTION_NAME" \
+            --name "$ALIAS_NAME" \
+            --function-version "$LAMBDA_VERSION" \
+            --output json > /dev/null
+
+          echo "$FUNCTION_NAME: $ALIAS_NAME -> version $LAMBDA_VERSION ($RELEASE_TAG)"
