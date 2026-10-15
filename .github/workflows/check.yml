@@ -35,9 +35,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: igdb_enricher
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
