@@ -1,3 +1,6 @@
 .env
 out/
 venv/
+.venv/
+.junie/
+.idea
