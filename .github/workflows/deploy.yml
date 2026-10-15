@@ -135,16 +135,16 @@ jobs:
           fi
 
           case "$ARCHITECTURE" in
-            x86_64) PLATFORM=manylinux2014_x86_64 ;;
-            arm64) PLATFORM=manylinux2014_aarch64 ;;
+            x86_64) PLATFORM_ARCH=x86_64 ;;
+            arm64) PLATFORM_ARCH=aarch64 ;;
             *)
               echo "::error::Unsupported architecture: $ARCHITECTURE"
               exit 1
               ;;
           esac
-
+          
           echo "python_version=${RUNTIME#python}" >> "$GITHUB_OUTPUT"
-          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "platform_arch=$PLATFORM_ARCH" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -157,7 +157,7 @@ jobs:
         shell: bash
         env:
           PYTHON_VERSION: ${{ steps.lambda.outputs.python_version }}
-          PLATFORM: ${{ steps.lambda.outputs.platform }}
+          PLATFORM_ARCH: ${{ steps.lambda.outputs.platform_arch }}
         run: |
           set -euo pipefail
 
@@ -167,7 +167,8 @@ jobs:
           python -m pip install \
             --requirement requirements.txt \
             --target packaged-lambda/ \
-            --platform "$PLATFORM" \
+            --platform "manylinux_2_28_$PLATFORM_ARCH" \
+            --platform "manylinux2014_$PLATFORM_ARCH" \
             --implementation cp \
             --python-version "$PYTHON_VERSION" \
             --only-binary=:all: \
