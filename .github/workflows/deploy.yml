@@ -100,7 +100,7 @@ jobs:
       id-token: write
     env:
       RELEASE_TAG: ${{ needs.release.outputs.tag }}
-      FUNCTION_NAME: igdb-enricher
+      FUNCTION_NAME: trophyquest-igdb-enricher
       ALIAS_NAME: prod
       AWS_PAGER: ""
 
