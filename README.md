@@ -56,6 +56,15 @@ Par défaut, la limite est fixée à `20` si non spécifiée.
 
 Vous pouvez appeler `run_enricher` directement depuis `src/run.py`.
 
+### Screenshot backfill
+
+Run the backfill for specific matched IGDB game IDs with the usual PostgreSQL and Twitch settings.
+Omit the IDs to process all matched games. The command inserts missing screenshots and keeps existing associations and URLs.
+
+```bash
+PYTHONPATH=src python -m igdb_enricher.backfill_screenshots 1001 1002
+```
+
 ## Structure du projet
 
 - `handler.py` : Point d'entrée pour AWS Lambda.

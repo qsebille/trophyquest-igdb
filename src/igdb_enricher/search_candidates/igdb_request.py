@@ -42,8 +42,6 @@ def search_igdb_games(
     Performs a game search request in IGDB API for a given title and platforms (optional).
     If no platforms are provided, all PlayStation platforms are queried.
     """
-    twitch_config = TwitchConfig()
-
     accepted_platforms = _build_accepted_platforms(platforms=platforms)
     platform_query = f"platforms = ({', '.join([str(p) for p in accepted_platforms])})"
 
@@ -64,6 +62,10 @@ def search_igdb_games(
         limit 50;
         '''
 
+    return request_igdb_games(query, TwitchConfig())
+
+
+def request_igdb_games(query: str, twitch_config: TwitchConfig) -> list[dict]:
     headers = {
         "Client-ID": twitch_config.client_id,
         "Authorization": f"Bearer {twitch_config.token}",

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class IgdbScreenshotRow:
-    id: int
+    id: str
     game_id: int = field(compare=False)
     igdb_url: str = field(compare=False)
 
@@ -37,4 +37,4 @@ def insert_screenshots(conn: Connection, rows: list[IgdbScreenshotRow]):
              """),
         [{"id": row.id, "game_id": row.game_id, "igdb_url": row.igdb_url} for row in screenshots]
     )
-    logger.info(f"Inserted {result.rowcount} collections")
+    logger.info("Inserted %d screenshots", result.rowcount)
