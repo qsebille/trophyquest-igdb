@@ -50,10 +50,10 @@ def run_igdb_enricher(suite_limit: int):
         for candidate in search_result.all_candidates:
             igdb_collection_rows.update(set([IgdbCollectionRow.build(c) for c in candidate.collections]))
             igdb_company_rows.update(set([IgdbCompanyRow.build(c) for c in candidate.companies]))
-            igdb_screenshot_rows = [
+            igdb_screenshot_rows.extend(
                 IgdbScreenshotRow.build(candidate.id, screen_id)
                 for screen_id in candidate.screenshot_ids
-            ]
+            )
 
         with tq_engine.begin() as conn:
             insert_collections(conn=conn, rows=list(igdb_collection_rows))

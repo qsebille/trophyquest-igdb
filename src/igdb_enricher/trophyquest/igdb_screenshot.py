@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class IgdbScreenshotRow:
-    id: int
+    id: str
     game_id: int = field(compare=False)
     igdb_url: str = field(compare=False)
 
@@ -22,12 +22,12 @@ class IgdbScreenshotRow:
         )
 
 
-def insert_screenshots(conn: Connection, rows: list[IgdbScreenshotRow]):
+def insert_screenshots(conn: Connection, rows: list[IgdbScreenshotRow]) -> int:
     screenshots = [row for row in rows if row.id is not None and row.igdb_url is not None and row.game_id is not None]
 
     if not screenshots:
         logger.info("No screenshot to insert")
-        return
+        return 0
 
     result = conn.execute(
         text("""
@@ -37,4 +37,5 @@ def insert_screenshots(conn: Connection, rows: list[IgdbScreenshotRow]):
              """),
         [{"id": row.id, "game_id": row.game_id, "igdb_url": row.igdb_url} for row in screenshots]
     )
-    logger.info(f"Inserted {result.rowcount} collections")
+    logger.info(f"Inserted {result.rowcount} screenshots")
+    return result.rowcount

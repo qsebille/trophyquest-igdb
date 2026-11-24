@@ -12,10 +12,12 @@ IGDB_BASE_URL = "https://api.igdb.com/v4"
 class TwitchConfig:
     _token: str | None = None
     _token_expiration = 0
+    app_client_id: str | None = None
+    app_client_secret: str | None = None
 
     @property
     def client_id(self) -> str:
-        return os.environ["TWITCH_CLIENT_ID"]
+        return self.app_client_id or os.environ["TWITCH_CLIENT_ID"]
 
     @property
     def token(self) -> str:
@@ -24,7 +26,7 @@ class TwitchConfig:
         if self._token is not None and now < self._token_expiration - 60:
             return self._token
 
-        client_secret = os.environ["TWITCH_CLIENT_SECRET"]
+        client_secret = self.app_client_secret or os.environ["TWITCH_CLIENT_SECRET"]
         r = requests.post(
             TWITCH_TOKEN_URL,
             params={
