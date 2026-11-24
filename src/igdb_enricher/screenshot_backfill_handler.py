@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from contextlib import closing
 
 import boto3
 from sqlalchemy import URL, create_engine
@@ -42,7 +43,7 @@ def handler(event, context):
     game_ids, options = _parse_event(event)
     logging.getLogger().setLevel(logging.INFO)
 
-    with boto3.client("secretsmanager") as client:
+    with closing(boto3.client("secretsmanager")) as client:
         database = json.loads(client.get_secret_value(SecretId=os.environ["POSTGRES_SECRET_ARN"])["SecretString"])
         twitch = json.loads(client.get_secret_value(SecretId=os.environ["TWITCH_SECRET_ARN"])["SecretString"])
 
