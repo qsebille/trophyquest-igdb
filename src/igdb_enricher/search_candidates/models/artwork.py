@@ -1,71 +1,43 @@
-from dataclasses import dataclass
-from enum import Enum
+from collections.abc import Iterator
+from itertools import chain
 
 
-class _ImageType(Enum):
-    KEY_ART_WITHOUT_LOGO = 2
-    KEY_ART_WITH_LOGO = 3
-    UNCERTAIN = 0
+BACKGROUND_IMAGE_FIELDS = (
+    "artworks.image_id, artworks.height, artworks.width, artworks.image_type.id, "
+    "screenshots.image_id, screenshots.height, screenshots.width"
+)
+
+_ARTWORK_PRIORITIES = {2: 0, 3: 1}
+_OTHER_ARTWORK_PRIORITY = 2
+_SCREENSHOT_PRIORITY = 3
 
 
-@dataclass
-class Artwork:
-    image_id: str
-    height: int
-    width: int
-    image_type_id: int
+def _rank_images(
+    images: list[dict], *, screenshot: bool = False
+) -> Iterator[tuple[int, float, int, str]]:
+    for image in images:
+        image_id = image.get("image_id")
+        width = image.get("width")
+        height = image.get("height")
+        if not isinstance(image_id, str) or not image_id.strip():
+            continue
+        if type(width) is not int or type(height) is not int or width < 1280 or height < 720:
+            continue
+        if not 1.5 <= width / height <= 2.4:
+            continue
 
-    # TODO: Revoir, accepter plus de résolutions (ex: Jusant)
-    @property
-    def resolution(self) -> int:
-        if self.width == 0 or self.height == 0:
-            return 0
-        return self.width / self.height
-
-    @property
-    def image_type(self) -> _ImageType:
-        match self.image_type_id:
-            case _ImageType.KEY_ART_WITHOUT_LOGO.value:
-                return _ImageType.KEY_ART_WITHOUT_LOGO
-            case _ImageType.KEY_ART_WITH_LOGO.value:
-                return _ImageType.KEY_ART_WITH_LOGO
-            case _:
-                return _ImageType.UNCERTAIN
-
-    @property
-    def is_potential_background(self) -> bool:
-        resolution_ok = 16 / 9 - 0.01 < self.resolution < 16 / 9 + 0.01
-        size_ok = min(self.height, self.width) > 1000
-        return resolution_ok and size_ok
-
-    @classmethod
-    def from_dict(cls, artwork: dict) -> "Artwork":
-        return cls(
-            image_id=artwork.get("image_id"),
-            height=artwork.get("height", 0),
-            width=artwork.get("width", 1),
-            image_type_id=artwork.get("image_type", {}).get("id")
+        image_type = image.get("image_type")
+        image_type_id = image_type.get("id") if isinstance(image_type, dict) else image_type
+        priority = (
+            _SCREENSHOT_PRIORITY if screenshot
+            else _ARTWORK_PRIORITIES.get(image_type_id, _OTHER_ARTWORK_PRIORITY)
         )
+        yield priority, abs(width / height - 16 / 9), -(width * height), image_id.strip()
 
 
-def compute_candidate_background(artworks: list[dict]) -> str | None:
-    if not artworks:
-        return None
-
-    casted_artworks = [Artwork.from_dict(a) for a in artworks]
-    background_without_logo = next((
-        a for a in casted_artworks
-        if a.is_potential_background and a.image_type == _ImageType.KEY_ART_WITHOUT_LOGO
-    ), None)
-    background_with_logo = next((
-        a for a in casted_artworks
-        if a.is_potential_background and a.image_type == _ImageType.KEY_ART_WITH_LOGO
-    ), None)
-    background_undefined = next((
-        a for a in casted_artworks
-        if a.is_potential_background and a.image_type == _ImageType.UNCERTAIN
-    ), None)
-
-    background = background_without_logo or background_with_logo or background_undefined
-    background_id = background.image_id if background else None
-    return f"https://images.igdb.com/igdb/image/upload/t_720p/{background_id}.jpg" if background_id else None
+def compute_candidate_background(artworks: list[dict], screenshots: list[dict]) -> str | None:
+    image = min(
+        chain(_rank_images(artworks), _rank_images(screenshots, screenshot=True)),
+        default=None,
+    )
+    return f"https://images.igdb.com/igdb/image/upload/t_720p/{image[-1]}.jpg" if image else None

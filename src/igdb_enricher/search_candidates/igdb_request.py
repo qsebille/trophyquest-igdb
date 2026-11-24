@@ -3,6 +3,7 @@ from enum import Enum
 from requests import post
 
 from igdb_enricher.config.twitch import TwitchConfig, IGDB_BASE_URL
+from igdb_enricher.search_candidates.models.artwork import BACKGROUND_IMAGE_FIELDS
 
 
 class _PlatformCodes(Enum):
@@ -51,8 +52,7 @@ def search_igdb_games(
             genres.name, themes.name, collections.name,
             videos.video_id,
             websites.url, websites.type.id,
-            cover.image_id, screenshots.image_id,
-            artworks.image_id, artworks.height, artworks.width, artworks.image_type.name,
+            cover.image_id, {BACKGROUND_IMAGE_FIELDS},
             involved_companies.developer, involved_companies.publisher,
             involved_companies.company.name, involved_companies.company.country,
             game_type.type, version_parent, platforms.name,
