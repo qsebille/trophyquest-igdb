@@ -7,6 +7,11 @@ from igdb_enricher.search_candidates.models.candidate import IgdbCandidate
 
 logger = logging.getLogger(__name__)
 
+MISSING_BACKGROUND = """
+    COALESCE(game.igdb_background_url, '') !~ '[^[:space:]]'
+    AND COALESCE(game.aws_background_url, '') !~ '[^[:space:]]'
+"""
+
 
 @dataclass
 class IgdbGameRow:
@@ -58,14 +63,18 @@ def insert_games(conn: Connection, games: list[IgdbGameRow]):
         return
 
     result = conn.execute(
-        text("""
-             INSERT INTO igdb.game (id, name, summary, game_type, release_date, genres, themes, platforms,
+        text(f"""
+             INSERT INTO igdb.game AS game (id, name, summary, game_type, release_date, genres, themes, platforms,
                                     igdb_cover_url, igdb_background_url, youtube_ids, publisher_id, developer_id,
                                     collection_id, official_website, wikia_website)
              VALUES (:id, :name, :summary, :game_type, :release_date, :genres, :themes, :platforms, :cover_url,
                      :background_url, :youtube_ids, :publisher_id, :developer_id, :collection_id, :official_website,
                      :wikia_website)
-             ON CONFLICT (id) DO NOTHING
+             ON CONFLICT (id) DO UPDATE
+             SET igdb_background_url = EXCLUDED.igdb_background_url,
+                 aws_background_url = NULL
+             WHERE EXCLUDED.igdb_background_url IS NOT NULL
+               AND {MISSING_BACKGROUND}
              """),
         [
             {"id": game.id, "name": game.name, "summary": game.summary, "game_type": game.game_type,
@@ -77,4 +86,4 @@ def insert_games(conn: Connection, games: list[IgdbGameRow]):
             for game in games
         ],
     )
-    logger.info(f"Inserted {result.rowcount} games")
+    logger.info(f"Inserted games or filled missing backgrounds for {result.rowcount} games")

@@ -17,7 +17,7 @@ class IgdbCandidate:
     collections: list[dict]
     youtube_ids: list[str]
     cover_url: str
-    background_url: str
+    background_url: str | None
     screenshot_ids: list[str]
     developer: dict
     publisher: dict
@@ -99,7 +99,9 @@ class IgdbCandidate:
             youtube_ids=[v["video_id"] for v in input_dict.get("videos", [])],
             screenshot_ids=IgdbCandidate._compute_screenshot_ids(input_dict),
             cover_url=IgdbCandidate._compute_cover_url(input_dict),
-            background_url=compute_candidate_background(input_dict.get("artworks", [])),
+            background_url=compute_candidate_background(
+                input_dict.get("artworks", []), input_dict.get("screenshots", [])
+            ),
             developer=IgdbCandidate._compute_developer(input_dict),
             publisher=IgdbCandidate._compute_publisher(input_dict),
             official_website=IgdbCandidate._compute_official_website(input_dict),

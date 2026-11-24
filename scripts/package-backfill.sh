@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 mkdir -p out
-archive="$PWD/out/screenshot-backfill.zip"
+archive="$PWD/out/igdb-backfill.zip"
 build_dir=$(mktemp -d)
 trap 'rm -rf "$build_dir"' EXIT
 mkdir "$build_dir/files"
@@ -21,6 +21,6 @@ python -m pip install \
 cp -R src/igdb_enricher "$build_dir/files/"
 (
   cd "$build_dir/files"
-  zip -qr ../screenshot-backfill.zip . -x '*/__pycache__/*' '*.pyc'
+  zip -qr ../igdb-backfill.zip . -x '*/__pycache__/*' '*.pyc'
 )
-mv "$build_dir/screenshot-backfill.zip" "$archive"
+mv "$build_dir/igdb-backfill.zip" "$archive"

@@ -56,14 +56,25 @@ Par défaut, la limite est fixée à `20` si non spécifiée.
 
 Vous pouvez appeler `run_enricher` directement depuis `src/run.py`.
 
-### Screenshot backfill
+### IGDB backfill
 
-Run the backfill for specific matched IGDB game IDs with the usual PostgreSQL and Twitch settings.
-Omit the IDs to process all matched games. The command inserts missing screenshots and keeps existing associations and URLs.
+Use the local PostgreSQL and Twitch settings to preview missing backgrounds for
+matched games. The local runner requires a loopback PostgreSQL host.
 
 ```bash
-PYTHONPATH=src python -m igdb_enricher.backfill_screenshots 1001 1002
+PYTHONPATH=src python -m igdb_enricher.local_backfill backgrounds --game-ids 1001 1002
+PYTHONPATH=src python -m igdb_enricher.local_backfill backgrounds --scan --limit 50
 ```
+
+Add `--apply` to write the proposed backgrounds. Use `--after-game-id` to
+resume a scan from the last reported cursor. Each batch reports recoverable
+games, actual updates, games without a suitable image and IDs missing from IGDB.
+Preview results include the proposed URLs.
+
+Before deploying the regular enricher with a restricted PostgreSQL role, grant
+it `SELECT (id, igdb_background_url, aws_background_url)` and
+`UPDATE (igdb_background_url, aws_background_url)` on `igdb.game` if needed
+for the guarded upsert. Keep its existing insert privileges.
 
 ## Structure du projet
 
